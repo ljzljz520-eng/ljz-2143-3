@@ -1,0 +1,3 @@
+data.sqlite
+test/test-*.sqlite
+node_modules/

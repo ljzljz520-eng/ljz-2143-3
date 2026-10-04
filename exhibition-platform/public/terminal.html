@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>城市展览馆 · 欢迎</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body { margin:0; height:100%; font-family:"PingFang SC","Microsoft YaHei",sans-serif; color:#fff; }
+  #bg { position:fixed; inset:0; background-size:cover; background-position:center; transition:background .5s; z-index:-2; }
+  #dim { position:fixed; inset:0; background:rgba(10,16,32,.45); z-index:-1; }
+  main { max-width:900px; margin:0 auto; padding:36px 24px; }
+  h1 { font-size:34px; margin:0 0 4px; text-shadow:0 2px 8px rgba(0,0,0,.5); }
+  .sub { opacity:.85; margin-bottom:18px; }
+  #badge { display:inline-block; padding:8px 20px; border-radius:24px; font-size:20px; font-weight:600; }
+  .open { background:#1c7c35; } .closed { background:#5a6270; } .stale { background:#b07d10; }
+  #statusLine { margin-top:8px; font-size:15px; opacity:.95; }
+  .panel { background:rgba(16,24,44,.72); border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:16px 20px; margin-top:18px; backdrop-filter:blur(4px); }
+  .routeBtn { display:block; width:100%; text-align:left; margin:10px 0; padding:14px 18px; font-size:18px; border:none; border-radius:10px; background:#2f6fed; color:#fff; cursor:pointer; }
+  .routeBtn:disabled { background:#3a4358; color:#9aa4b8; cursor:not-allowed; }
+  .routeBtn small { display:block; font-size:12px; opacity:.85; margin-top:3px; }
+  #staleBanner { display:none; background:#7a5a00; padding:10px 16px; border-radius:10px; margin-top:14px; font-size:15px; }
+  #bgNote { display:none; background:#5a3a3a; padding:6px 12px; border-radius:8px; font-size:12px; margin-top:10px; }
+  #clock { font-size:15px; opacity:.9; } select,input { font-size:13px; }
+  footer { margin-top:26px; font-size:12px; opacity:.75; line-height:1.8; }
+  #tour { display:none; position:fixed; inset:0; background:rgba(8,12,24,.92); z-index:5; padding:40px; }
+  #tour .inner { max-width:640px; margin:0 auto; background:#1c2742; border-radius:14px; padding:26px; }
+  .toolbar label { margin-right:14px; font-size:13px; }
+</style>
+</head>
+<body>
+<div id="bg"></div><div id="dim"></div>
+<main>
+  <h1 id="welcome">…</h1>
+  <div class="sub">City Exhibition Hall · 智能欢迎终端 <span id="dev"></span></div>
+  <div><span id="badge" class="closed">…</span></div>
+  <div id="statusLine"></div>
+  <div id="staleBanner">⚠️ 信息可能已过期，状态待核实。欢迎文字与基本导航保持可用，开放状态与导览服务请向工作人员确认。</div>
+  <div id="bgNote"></div>
+  <div class="panel toolbar">
+    <span id="clock"></span>
+    <label>显示时区 <select id="tzSel">
+      <option value="">场馆时区</option><option>UTC</option><option>Asia/Tokyo</option>
+      <option>Europe/London</option><option>America/New_York</option><option>Australia/Sydney</option>
+    </select></label>
+    <label><input type="checkbox" id="offline"> 模拟离线</label>
+    <label>数据源 <select id="modeSel"><option value="package">提前下载包</option><option value="realtime">服务端实时</option></select></label>
+    <button id="refreshBtn">立即同步</button>
+  </div>
+  <div class="panel"><b>今日开放时段</b><div id="hours" style="margin-top:6px"></div></div>
+  <div class="panel"><b>导览服务</b><div id="routes"></div></div>
+  <div class="panel" id="zonePanel"><b>展区一览（基本导航）</b><div id="zones" style="margin-top:6px"></div></div>
+  <footer id="meta"></footer>
+</main>
+<div id="tour"><div class="inner">
+  <h2 id="tourTitle"></h2><p id="tourBody"></p>
+  <button class="routeBtn" id="finishTour">完成导览并提交回执</button>
+  <button class="routeBtn" style="background:#3a4358" onclick="document.getElementById('tour').style.display='none'">退出</button>
+  <p id="tourMsg" style="font-size:13px;opacity:.8"></p>
+</div></div>
+<script src="/schedule.js"></script>
+<script src="/terminal-core.js"></script>
+<script>
+const Q = new URLSearchParams(location.search);
+const DEVICE = Q.device || 'term-1';
+const BGBREAK = Q.bgbreak === '1';
+let pkg = null, fetchedLocal = 0, tourCtx = null;
+const $ = s => document.querySelector(s);
+$('#dev').textContent = '· 设备 ' + DEVICE;
+
+/* 背景：加载失败回退（可用 ?bgbreak=1 演示故障） */
+function applyBackground() {
+  if (!pkg) return;
+  const url = pkg.bg && pkg.bg.url;
+  if (BGBREAK || !url) return showBg(TerminalCore.pickBackground(pkg, false));
+  const img = new Image();
+  img.onload = () => showBg({ type:'image', url });
+  img.onerror = () => showBg(TerminalCore.pickBackground(pkg, false));
+  img.src = url;
+}
+function showBg(b) {
+  $('#bg').style.background = b.type === 'image' ? `url('${b.url}') center/cover` : b.color;
+  $('#bgNote').style.display = b.degraded ? 'block' : 'none';
+  $('#bgNote').textContent = b.note || '';
+}
+
+async function sync() {
+  if ($('#offline').checked) return render();           // 离线：只用缓存包
+  try {
+    const r = await fetch(`/api/devices/${DEVICE}/package`);
+    const j = await r.json();
+    const h = TerminalCore.handlePackageHttp(r.status, j);
+    if (h.mode === 'ok') {
+      pkg = h.pkg; fetchedLocal = Date.now();
+      localStorage['pkg_' + DEVICE] = JSON.stringify({ pkg, fetchedLocal });
+      applyBackground();
+    } else if (!pkg) {
+      const cache = localStorage['pkg_' + DEVICE];
+      if (cache) { const c = JSON.parse(cache); pkg = c.pkg; fetchedLocal = c.fetchedLocal; applyBackground(); }
+      else renderStale(h.reason);
+    } // 有缓存包则继续按新鲜度评估（evaluate 会处理过期）
+    render();
+  } catch (e) {
+    const cache = localStorage['pkg_' + DEVICE];
+    if (cache && !pkg) { const c = JSON.parse(cache); pkg = c.pkg; fetchedLocal = c.fetchedLocal; applyBackground(); }
+    render();
+  }
+}
+function renderStale(reason) {
+  $('#badge').className = 'stale'; $('#badge').textContent = '状态待核实';
+  $('#statusLine').textContent = reason; $('#staleBanner').style.display = 'block';
+}
+
+function render() {
+  const mode = $('#modeSel').value;
+  if (mode === 'realtime' && !$('#offline').checked) return renderRealtime();
+  const estNow = pkg ? TerminalCore.estimateNow(pkg, fetchedLocal, Date.now()) : Date.now();
+  const v = TerminalCore.evaluate(pkg, estNow);
+  $('#welcome').textContent = v.welcome;
+  $('#zones').innerHTML = v.zones.map(z => `📍 ${z.name}`).join('　') || '—';
+  const b = $('#badge');
+  if (v.mode === 'stale') {
+    b.className = 'stale'; b.textContent = '状态待核实';
+    $('#statusLine').textContent = v.status.reason; $('#staleBanner').style.display = 'block';
+    $('#hours').innerHTML = '<i>待联网核实</i>';
+  } else {
+    $('#staleBanner').style.display = 'none';
+    b.className = v.status.open ? 'open' : 'closed';
+    b.textContent = v.status.open ? '开放中' : '已闭馆';
+    $('#statusLine').textContent = v.status.label + (v.status.until ? ' · 至 ' + Schedule.clock(v.status.until, pkg.tz) : '');
+    const today = Schedule.zonedParts(estNow, pkg.tz).date;
+    $('#hours').innerHTML = Schedule.dayTimeline(pkg, today, pkg.tz).filter(s => s.open)
+      .map(s => `🕐 ${s.start_clock}–${s.end_clock}（${s.label}）`).join('<br>') || '今日无开放时段';
+  }
+  $('#routes').innerHTML = v.routes.map(r =>
+    `<button class="routeBtn" ${r.enabled ? '' : 'disabled'} onclick="startTour(${r.id},'${r.name}')">
+       ${r.enabled ? '▶ ' : '⛔ '}${r.name}<small>${r.enabled ? '点击进入导览' : r.reason}</small></button>`).join('') || '—';
+  $('#meta').innerHTML = pkg ? `发布版本 v${pkg.version} · 生成于 ${new Date(pkg.generated_at).toLocaleString('zh-CN')}
+    · 新鲜度截止 ${new Date(pkg.valid_until).toLocaleString('zh-CN')}<br>
+    离线估算时刻存在时钟漂移风险；超过新鲜度期限后终端不再承诺开放。` : '无数据包';
+}
+
+async function renderRealtime() {
+  try {
+    const r = await fetch(`/api/status?device_id=${DEVICE}`);
+    const j = await r.json();
+    $('#badge').className = j.status.open ? 'open' : 'closed';
+    $('#badge').textContent = j.status.open ? '开放中' : '已闭馆';
+    $('#statusLine').textContent = j.status.label + '（服务端实时计算）';
+    $('#routes').innerHTML = j.routes.map(r =>
+      `<button class="routeBtn" ${r.enabled ? '' : 'disabled'}>${r.enabled ? '▶ ' : '⛔ '}${r.name}<small>${r.enabled ? '' : r.reason}</small></button>`).join('');
+  } catch (e) { $('#statusLine').textContent = '实时接口不可达'; }
+}
+
+/* 导览与回执 */
+window.startTour = (id, name) => {
+  const estNow = TerminalCore.estimateNow(pkg, fetchedLocal, Date.now());
+  tourCtx = { route_id: id, publication_id: pkg.publication_id, device_id: DEVICE,
+              receipt_id: crypto.randomUUID(), started_at: estNow };
+  $('#tourTitle').textContent = name; $('#tourMsg').textContent = '';
+  $('#tourBody').textContent = '导览进行中…（回执将关联发布版本 #' + pkg.publication_id + '）';
+  $('#tour').style.display = 'block';
+};
+$('#finishTour').onclick = async () => {
+  tourCtx.completed_at = TerminalCore.estimateNow(pkg, fetchedLocal, Date.now());
+  try {
+    const r = await fetch('/api/receipts', { method:'POST', headers:{'content-type':'application/json','x-actor':encodeURIComponent(DEVICE)}, body:JSON.stringify(tourCtx) });
+    const j = await r.json();
+    $('#tourMsg').textContent = j.receipt.late ? '回执已登记（晚到标记，已留痕）' : '回执已登记，感谢参观！';
+  } catch (e) { $('#tourMsg').textContent = '离线中：回执已暂存，联网后补交（演示略）'; }
+};
+
+/* 时钟：显示时区可切换，开闭馆判定永远按场馆时区 */
+setInterval(() => {
+  const tz = $('#tzSel').value || (pkg && pkg.tz) || 'Asia/Shanghai';
+  const estNow = pkg ? TerminalCore.estimateNow(pkg, fetchedLocal, Date.now()) : Date.now();
+  $('#clock').textContent = '🕒 ' + new Date(estNow).toLocaleString('zh-CN', { timeZone: tz, hour12: false }) + '（' + tz + '）';
+}, 1000);
+setInterval(render, 5000);
+setInterval(sync, 20000);
+$('#refreshBtn').onclick = sync;
+$('#modeSel').onchange = render;
+$('#offline').onchange = sync;
+sync();
+</script>
+</body>
+</html>

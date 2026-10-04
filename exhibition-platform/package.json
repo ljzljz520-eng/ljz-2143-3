@@ -1,0 +1,10 @@
+{
+  "name": "exhibition-platform",
+  "version": "1.0.0",
+  "description": "展馆欢迎平台：C终端 + 管理网页 + 服务API",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node test/acceptance.js"
+  },
+  "dependencies": { "sql.js": "^1.13.0" }
+}

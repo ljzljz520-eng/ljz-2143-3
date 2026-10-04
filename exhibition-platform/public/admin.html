@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>展馆欢迎平台 · 管理后台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "PingFang SC","Microsoft YaHei",sans-serif; margin:0; background:#f4f6fa; color:#223; }
+  header { background:#1f2a44; color:#fff; padding:12px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  header .actor { margin-left:auto; }
+  header input { padding:4px 8px; border-radius:4px; border:none; }
+  nav { background:#fff; padding:0 12px; border-bottom:1px solid #dde; display:flex; flex-wrap:wrap; }
+  nav button { border:none; background:none; padding:12px 14px; cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
+  nav button.on { border-color:#2f6fed; color:#2f6fed; font-weight:600; }
+  main { padding:16px 20px; max-width:1200px; margin:0 auto; }
+  section { display:none; } section.on { display:block; }
+  table { width:100%; border-collapse:collapse; background:#fff; margin:10px 0 20px; font-size:13px; }
+  th,td { padding:7px 9px; border-bottom:1px solid #e8ecf3; text-align:left; vertical-align:top; }
+  th { background:#f0f3f9; }
+  input,select,textarea { padding:4px 6px; border:1px solid #c9d2e0; border-radius:4px; font-size:13px; }
+  button.act { background:#2f6fed; color:#fff; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; }
+  button.warn { background:#d64545; } button.ghost { background:#eef1f7; color:#345; }
+  .card { background:#fff; border:1px solid #e3e8f0; border-radius:8px; padding:12px 14px; margin-bottom:14px; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; }
+  .t-open { background:#e2f6e8; color:#1c7c35; } .t-closed { background:#fde7e7; color:#b03030; }
+  .t-event { background:#fff3d6; color:#8a6d00; } .t-holiday { background:#e3ecff; color:#2f55b0; }
+  .t-weekly { background:#eee; color:#555; } .t-revoked { background:#fde7e7; color:#b03030; }
+  .t-active { background:#e2f6e8; color:#1c7c35; } .t-superseded { background:#eee; color:#777; }
+  .seg { display:inline-block; margin:2px 6px 2px 0; padding:2px 8px; border-radius:4px; font-size:12px; }
+  .conflict { background:#fde7e7; border:1px solid #e0a0a0; padding:10px; border-radius:6px; margin:8px 0; display:none; }
+  .muted { color:#889; font-size:12px; } .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  h3 { margin:14px 0 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏛 展馆欢迎平台 · 管理后台</h1>
+  <span class="muted" id="tzinfo"></span>
+  <span class="actor">操作人 <input id="actor" size="8" placeholder="名字"></span>
+  <a href="/terminal.html?device=term-1" target="_blank" style="color:#9fc1ff">打开终端 ↗</a>
+</header>
+<nav id="tabs"></nav>
+<main>
+  <section id="sec-timeline"><h3>实际生效范围（按当前草稿逐日解析：临时事件 &gt; 节假日 &gt; 周历；跨午夜会话完整保留）</h3><div id="timeline"></div></section>
+  <section id="sec-weekly"><h3>常规周历（闭馆分钟可 &gt;24:00 表示跨午夜，如 26:00 = 次日02:00）</h3><div id="weekly"></div></section>
+  <section id="sec-holidays"><h3>节假日安排</h3><div id="holidays"></div></section>
+  <section id="sec-events"><h3>临时事件（临时闭馆 / 临时开放，优先级高于节假日与周历）</h3><div id="events"></div></section>
+  <section id="sec-zones"><h3>展区（任何变更会提升版本号，引用旧版本的路线将在发布时标记不可用）</h3><div id="zones"></div></section>
+  <section id="sec-routes"><h3>导览路线（引用展区版本快照）</h3><div id="routes"></div></section>
+  <section id="sec-publish"><h3>发布版本与设备分组</h3><div id="publish"></div></section>
+  <section id="sec-receipts"><h3>导览回执（晚到不拒绝，标记留痕）</h3><div id="receipts"></div></section>
+  <section id="sec-audit"><h3>审计日志（含撤销原因与并发冲突）</h3><div id="audit"></div></section>
+</main>
+<script src="/schedule.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const TABS = [['timeline','生效时间线'],['weekly','常规周历'],['holidays','节假日'],['events','临时事件'],['zones','展区'],['routes','导览路线'],['publish','发布与分组'],['receipts','回执'],['audit','审计']];
+let BOOT = null, TZ = 'Asia/Shanghai';
+const actor = () => ($('#actor').value || localStorage.actor || 'admin');
+$('#actor').value = localStorage.actor || '';
+$('#actor').onchange = e => localStorage.actor = e.target.value;
+
+TABS.forEach(([id,name],i)=>{
+  const b=document.createElement('button'); b.textContent=name;
+  b.onclick=()=>{ TABS.forEach(([t])=>{ $('#sec-'+t).classList.remove('on'); }); document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on')); $('#sec-'+id).classList.add('on'); b.classList.add('on'); refresh(); };
+  if(i===0) b.classList.add('on'); $('#tabs').appendChild(b);
+});
+$('#sec-timeline').classList.add('on');
+
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: {'content-type':'application/json','x-actor':encodeURIComponent(actor())}, body: body?JSON.stringify(body):undefined });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) j._status = r.status;
+  return j;
+}
+const fmtMs = ms => ms==null?'—':new Date(ms).toLocaleString('zh-CN',{timeZone:TZ,hour12:false});
+const fmtDateInput = ms => { const p=Schedule.zonedParts(ms,TZ); return `${p.date}T${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`; };
+const parseLocal = v => { const [d,t]=v.split('T'); const [h,m]=t.split(':'); return Schedule.zonedMs(d, (+h)*60+(+m), TZ); };
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function refresh() {
+  BOOT = await api('GET','/api/bootstrap'); TZ = BOOT.tz;
+  $('#tzinfo').textContent = '场馆时区 ' + TZ;
+  renderTimeline(); renderWeekly(); renderHolidays(); renderEvents(); renderZones(); renderRoutes(); renderPublish(); renderReceipts(); renderAudit();
+}
+
+/* ---------- 生效时间线 ---------- */
+async function renderTimeline() {
+  const from = Schedule.zonedParts(Date.now(), TZ).date;
+  const data = await api('GET','/api/effective?from='+from+'&days=7');
+  const srcTag = s => s.source==='event'?'t-event':s.source==='holiday'?'t-holiday':'t-weekly';
+  $('#timeline').innerHTML = data.days.map(d=>{
+    const segs = d.segments.filter(s=>s.open || s.source==='event').map(s=>
+      `<span class="seg ${s.open?srcTag(s):'t-closed'}">${s.open?'🟢':'🔴'} ${s.start_clock}–${s.end_clock} ${esc(s.label)}</span>`).join('');
+    return `<div class="card"><b>${d.date}</b> ${segs||'<span class="muted">全天闭馆</span>'}</div>`;
+  }).join('');
+}
+
+/* ---------- 周历 ---------- */
+function renderWeekly() {
+  const wd = ['周日','周一','周二','周三','周四','周五','周六'];
+  $('#weekly').innerHTML = '<table><tr><th>星期</th><th>开放</th><th>关闭(可&gt;24:00)</th><th>名称</th><th>启用</th><th></th></tr>' +
+    BOOT.weekly.map(w=>`<tr><td>${wd[w.weekday]}</td>
+      <td><input id="wo${w.id}" value="${Schedule.fmtMin(w.open_min)}" size="5"></td>
+      <td><input id="wc${w.id}" value="${Schedule.fmtMin(w.close_min)}" size="5"></td>
+      <td><input id="wl${w.id}" value="${esc(w.label)}" size="18"></td>
+      <td><input type="checkbox" id="we${w.id}" ${w.enabled?'checked':''}></td>
+      <td><button class="act" onclick="saveWeekly(${w.id})">保存</button></td></tr>`).join('') + '</table>';
+}
+const parseHM = s => { const [h,m]=s.split(':').map(Number); return h*60+(m||0); };
+window.saveWeekly = async id => {
+  await api('PUT','/api/weekly/'+id,{ open_min:parseHM($('#wo'+id).value), close_min:parseHM($('#wc'+id).value), label:$('#wl'+id).value, enabled:$('#we'+id).checked });
+  refresh();
+};
+
+/* ---------- 节假日 ---------- */
+function renderHolidays() {
+  $('#holidays').innerHTML = `<div class="row card">
+    <input type="date" id="hd"><input id="hn" placeholder="名称" size="12">
+    <label><input type="checkbox" id="hc"> 闭馆</label>
+    <input id="ho" value="09:00" size="5">–<input id="he" value="17:00" size="5">
+    <button class="act" onclick="addHoliday()">添加</button></div>
+    <table><tr><th>日期</th><th>名称</th><th>安排</th><th></th></tr>` +
+    BOOT.holidays.map(h=>`<tr><td>${h.date}</td><td>${esc(h.name)}</td>
+      <td>${h.closed?'<span class="tag t-closed">闭馆</span>':`<span class="tag t-holiday">${Schedule.fmtMin(h.open_min)}–${Schedule.fmtMin(h.close_min)}</span>`}</td>
+      <td><button class="act warn" onclick="delHoliday(${h.id})">删除</button></td></tr>`).join('')+'</table>';
+}
+window.addHoliday = async () => { await api('POST','/api/holidays',{date:$('#hd').value,name:$('#hn').value,closed:$('#hc').checked,open_min:parseHM($('#ho').value),close_min:parseHM($('#he').value)}); refresh(); };
+window.delHoliday = async id => { await api('DELETE','/api/holidays/'+id); refresh(); };
+
+/* ---------- 临时事件（含并发冲突处理） ---------- */
+let editing = null;
+function renderEvents() {
+  const zoneOpts = '<option value="">整馆</option>' + BOOT.zones.map(z=>`<option value="${z.id}">${esc(z.name)}</option>`).join('');
+  $('#events').innerHTML = `<div class="card">
+    <div class="row"><input id="et" placeholder="事件标题" size="16">
+      <select id="ek"><option value="closed">临时闭馆</option><option value="open">临时开放</option></select>
+      <select id="ez">${zoneOpts}</select>
+      优先级 <input id="ep" type="number" value="0" size="3" style="width:60px"></div>
+    <div class="row">开始 <input type="datetime-local" id="es"> 结束 <input type="datetime-local" id="ee">
+      <button class="act" onclick="saveEvent()">${editing?'保存修改':'创建事件'}</button>
+      ${editing?`<button class="act ghost" onclick="editing=null;refresh()">取消编辑</button><span class="muted">基于版本 v${editing.base_version} 编辑</span>`:''}</div>
+    <div class="conflict" id="conflictBox"></div></div>
+    <table><tr><th>标题</th><th>类型</th><th>范围</th><th>时间(场馆时区)</th><th>优先级</th><th>版本</th><th>最近修改</th><th></th></tr>` +
+    BOOT.events.map(e=>{ const z=BOOT.zones.find(z=>z.id===e.zone_id);
+      return `<tr><td>${esc(e.title)}</td><td>${e.kind==='closed'?'<span class="tag t-closed">闭馆</span>':'<span class="tag t-open">开放</span>'}</td>
+      <td>${z?esc(z.name):'整馆'}</td><td>${fmtMs(e.start_at)}<br>→ ${fmtMs(e.end_at)}</td>
+      <td>${e.priority}</td><td>v${e.version}</td><td>${esc(e.updated_by||'')}<br><span class="muted">${fmtMs(e.updated_at)}</span></td>
+      <td><button class="act" onclick='editEvent(${e.id})'>编辑</button>
+          <button class="act warn" onclick="delEvent(${e.id})">删除</button></td></tr>`; }).join('')+'</table>';
+}
+window.editEvent = id => {
+  const e = BOOT.events.find(x=>x.id===id); if(!e) return;
+  editing = { id, base_version: e.version };
+  $('#et').value=e.title; $('#ek').value=e.kind; $('#ez').value=e.zone_id||''; $('#ep').value=e.priority;
+  $('#es').value=fmtDateInput(e.start_at); $('#ee').value=fmtDateInput(e.end_at);
+};
+window.saveEvent = async (forceBase) => {
+  const body = { title:$('#et').value, kind:$('#ek').value, zone_id:$('#ez').value?+$('#ez').value:null,
+    priority:+$('#ep').value||0, start_at:parseLocal($('#es').value), end_at:parseLocal($('#ee').value) };
+  if (!editing) { await api('POST','/api/events',body); return refresh(); }
+  body.base_version = forceBase != null ? forceBase : editing.base_version;
+  const r = await api('PUT','/api/events/'+editing.id, body);
+  if (r._status === 409) {
+    const box = $('#conflictBox'); box.style.display='block';
+    box.innerHTML = `⚠️ <b>保存冲突</b>：该事件已被 <b>${esc(r.current.updated_by)}</b> 于 ${fmtMs(r.current.updated_at)} 改为 v${r.current.version}
+      （"${esc(r.current.title)}" ${fmtMs(r.current.start_at)} → ${fmtMs(r.current.end_at)}）。<br>
+      你的修改未生效。 <button class="act warn" onclick="saveEvent(${r.current.version})">以其当前版本 v${r.current.version} 为基准强制覆盖</button>`;
+    return;
+  }
+  editing = null; refresh();
+};
+window.delEvent = async id => { await api('DELETE','/api/events/'+id); refresh(); };
+
+/* ---------- 展区 ---------- */
+function renderZones() {
+  $('#zones').innerHTML = `<div class="row card"><input id="zn" placeholder="新展区名称"><button class="act" onclick="addZone()">添加展区</button></div>
+    <table><tr><th>ID</th><th>名称</th><th>版本</th><th>状态</th><th></th></tr>` +
+    BOOT.zones.map(z=>`<tr><td>${z.id}</td><td><input id="zname${z.id}" value="${esc(z.name)}"></td><td>v${z.version}</td>
+      <td>${z.enabled?'<span class="tag t-open">开放</span>':'<span class="tag t-closed">已关闭</span>'}</td>
+      <td><button class="act" onclick="saveZone(${z.id})">保存(版本+1)</button>
+          <button class="act ${z.enabled?'warn':'ghost'}" onclick="toggleZone(${z.id},${z.enabled?0:1})">${z.enabled?'关闭展区':'重新开放'}</button></td></tr>`).join('')+'</table>';
+}
+window.addZone = async () => { await api('POST','/api/zones',{name:$('#zn').value}); refresh(); };
+window.saveZone = async id => { await api('PUT','/api/zones/'+id,{name:$('#zname'+id).value}); refresh(); };
+window.toggleZone = async (id,en) => { await api('PUT','/api/zones/'+id,{enabled:!!en}); refresh(); };
+
+/* ---------- 路线 ---------- */
+function renderRoutes() {
+  const zbox = BOOT.zones.map(z=>`<label><input type="checkbox" class="rz" value="${z.id}"> ${esc(z.name)}(v${z.version})</label>`).join(' ');
+  $('#routes').innerHTML = `<div class="row card"><input id="rn" placeholder="新路线名称"> ${zbox} <button class="act" onclick="addRoute()">创建路线</button></div>
+    <table><tr><th>名称</th><th>引用展区(版本快照)</th><th>状态</th><th></th></tr>` +
+    BOOT.routes.map(r=>`<tr><td>${esc(r.name)} <span class="muted">v${r.version}</span></td>
+      <td>${r.zone_refs.map(ref=>{ const z=BOOT.zones.find(z=>z.id===ref.zone_id);
+          const stale = z && z.version!==ref.zone_version;
+          return `<span class="tag ${stale?'t-revoked':'t-weekly'}">${z?esc(z.name):'?'} v${ref.zone_version}${stale?' → 现 v'+z.version+' ⚠️':''}</span>`; }).join(' ')}</td>
+      <td>${r.enabled?'<span class="tag t-open">启用</span>':'<span class="tag t-closed">停用</span>'}</td>
+      <td><button class="act" onclick="syncRoute(${r.id})">同步到当前展区版本</button>
+          <button class="act ${r.enabled?'warn':'ghost'}" onclick="toggleRoute(${r.id},${r.enabled?0:1})">${r.enabled?'停用':'启用'}</button></td></tr>`).join('')+'</table>';
+}
+window.addRoute = async () => { const ids=[...document.querySelectorAll('.rz:checked')].map(x=>+x.value); await api('POST','/api/routes',{name:$('#rn').value,zone_ids:ids}); refresh(); };
+window.syncRoute = async id => { const r=BOOT.routes.find(x=>x.id===id); await api('PUT','/api/routes/'+id,{zone_ids:r.zone_refs.map(x=>x.zone_id)}); refresh(); };
+window.toggleRoute = async (id,en) => { await api('PUT','/api/routes/'+id,{enabled:!!en}); refresh(); };
+
+/* ---------- 发布与分组 ---------- */
+function renderPublish() {
+  $('#publish').innerHTML = `<div class="row card">
+      新鲜度(分钟) <input id="pfresh" type="number" value="1440" size="6" style="width:90px">
+      备注 <input id="pnote" size="24" placeholder="本次发布说明">
+      <button class="act" onclick="doPublish()">发布新版本</button>
+      <span class="muted">发布后全部分组自动滚动到最新版本；撤销必须填写原因并留痕</span></div>
+    <h3>设备分组</h3><table><tr><th>分组</th><th>当前发布</th><th>设备</th></tr>` +
+    BOOT.groups.map(g=>`<tr><td>${esc(g.name)}</td><td>
+      <select onchange="api('PUT','/api/groups/${g.id}',{publication_id:+this.value||null}).then(refresh)">
+        <option value="">（未分配）</option>
+        ${BOOT.publications.map(p=>`<option value="${p.id}" ${g.publication_id===p.id?'selected':''}>v${p.version} (${p.status})</option>`).join('')}
+      </select></td>
+      <td>${BOOT.devices.filter(d=>d.group_id===g.id).map(d=>`<span class="tag t-weekly">${d.id} ${esc(d.name)}</span>`).join(' ')}</td></tr>`).join('') + `</table>
+    <h3>发布历史</h3><table><tr><th>版本</th><th>状态</th><th>有效期(场馆时区)</th><th>备注</th><th>撤销信息</th><th></th></tr>` +
+    BOOT.publications.map(p=>`<tr><td>v${p.version} <span class="muted">#${p.id}</span></td>
+      <td><span class="tag t-${p.status}">${p.status}</span></td>
+      <td>${fmtMs(p.valid_from)}<br>→ ${fmtMs(p.valid_until)}</td><td>${esc(p.note)}</td>
+      <td>${p.status==='revoked'?`<span class="tag t-revoked">${esc(p.revoke_reason)}</span><br><span class="muted">${esc(p.revoked_by)} · ${fmtMs(p.revoked_at)}</span>`:'—'}</td>
+      <td>${p.status!=='revoked'?`<button class="act warn" onclick="revoke(${p.id})">撤销</button>`:''}</td></tr>`).join('')+'</table>';
+}
+window.doPublish = async () => { await api('POST','/api/publications',{freshness_minutes:+$('#pfresh').value, note:$('#pnote').value}); refresh(); };
+window.revoke = async id => {
+  const reason = prompt('撤销原因（必填，将永久留痕）：'); if(!reason) return alert('必须填写撤销原因');
+  await api('POST',`/api/publications/${id}/revoke`,{reason}); refresh();
+};
+
+/* ---------- 回执 / 审计 ---------- */
+function renderReceipts() {
+  $('#receipts').innerHTML = '<table><tr><th>回执</th><th>路线</th><th>发布</th><th>设备</th><th>开始→完成</th><th>判定</th></tr>' +
+    BOOT.receipts.map(r=>`<tr><td class="muted">${esc(r.receipt_id.slice(0,13))}…</td><td>${r.route_id}</td><td>#${r.publication_id}</td>
+      <td>${esc(r.device_id)}</td><td>${fmtMs(r.started_at)}<br>→ ${fmtMs(r.completed_at)}</td>
+      <td>${r.late?'<span class="tag t-event">晚到</span>':'<span class="tag t-open">正常</span>'}
+          ${r.valid_at_start?'<span class="tag t-open">开始时有效</span>':'<span class="tag t-closed">开始时无效</span>'}
+          <br><span class="muted">${esc(r.note)}</span></td></tr>`).join('')+'</table>';
+}
+function renderAudit() {
+  $('#audit').innerHTML = '<table><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr>' +
+    BOOT.audit.map(a=>`<tr><td class="muted">${fmtMs(a.at)}</td><td>${esc(a.actor)}</td>
+      <td>${{publish:'🚀发布',revoke:'⛔撤销',conflict:'⚠️冲突',late_receipt:'🕐晚到回执'}[a.action]||esc(a.action)}</td>
+      <td>${esc(a.entity)}#${esc(a.entity_id)}</td><td class="muted" style="max-width:420px;word-break:break-all">${esc(a.detail)}</td></tr>`).join('')+'</table>';
+}
+refresh(); setInterval(refresh, 30000);
+</script>
+</body>
+</html>
