@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>展馆欢迎终端</title>
+<link rel="stylesheet" href="styles.css">
+<script src="/lib/time.js"></script>
+<script src="/lib/schedule.js"></script>
+<script src="/lib/client.js"></script>
+</head>
+<body>
+<div id="bg" class="bg" aria-hidden="true"></div>
+
+<main class="screen">
+  <header class="topbar">
+    <div id="clock" class="clock">--:--</div>
+    <div id="src-badge" class="badge">连接中…</div>
+  </header>
+
+  <section class="hero">
+    <h1 id="welcome">欢迎莅临展馆</h1>
+    <div id="status-card" class="status-card">
+      <div id="state" class="state loading">正在获取开放状态</div>
+      <div id="state-note" class="state-note"></div>
+      <div id="state-range" class="state-range"></div>
+      <div id="warnings" class="warnings"></div>
+    </div>
+  </section>
+
+  <section id="open-hours" class="hours"></section>
+
+  <section class="guides">
+    <h2>导览入口</h2>
+    <div id="guide-buttons" class="guide-buttons"></div>
+    <div id="guide-note" class="guide-note"></div>
+  </section>
+
+  <nav class="basic-nav" aria-label="基本导航">
+    <!-- 基本导航在任何状态（待核实/离线/背景失败）下都保留 -->
+    <a href="#" onclick="return false">楼层总览</a>
+    <a href="#" onclick="return false">交通与咨询</a>
+    <a href="#" onclick="return false">呼叫工作人员</a>
+  </nav>
+</main>
+
+<!-- 验收模拟控制台（真实 C 终端上可隐藏） -->
+<details class="sim">
+  <summary>终端验收模拟（网络 / 时钟 / 包 / 背景 / 回执）</summary>
+  <div class="sim-grid">
+    <label>设备 ID <input id="device-id" value="d-demo"></label>
+    <label>分组 ID <input id="group-id" value="g-demo"></label>
+    <label><input type="checkbox" id="force-offline"> 强制离线（仅用预下载包）</label>
+    <label>本地时钟偏移(ms) <input id="clock-offset" type="number" value="0" step="1000"></label>
+    <label><input type="checkbox" id="bg-fail"> 模拟背景加载失败</label>
+    <button id="btn-download">立即下载/更新包</button>
+    <button id="btn-send-late">用旧包发送“晚到导览回执”</button>
+    <button id="btn-refresh">立即刷新状态</button>
+    <div id="sim-log" class="sim-log"></div>
+  </div>
+</details>
+<script src="app.js"></script>
+</body>
+</html>

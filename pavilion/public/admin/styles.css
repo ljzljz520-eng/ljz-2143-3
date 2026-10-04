@@ -1,0 +1,31 @@
+body { margin:0; font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:#f2f5f9; color:#1d2b3a; }
+.top { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; background:#0e2a45; color:#fff; }
+.top h1 { font-size:19px; margin:0; }
+.auth input { padding:6px 8px; border-radius:6px; border:1px solid #557; }
+button { padding:6px 12px; border-radius:6px; border:1px solid #2a6; background:#1f7a4d; color:#fff; cursor:pointer; }
+button.primary { background:#1457b8; border-color:#1457b8; }
+button.warn { background:#b23b3b; border-color:#b23b3b; }
+button.plain { background:#e6ecf3; color:#223; border-color:#b8c4d2; }
+.tabs { display:flex; gap:4px; padding:0 16px; background:#163a5c; flex-wrap:wrap; }
+.tabs button { background:transparent; border:none; color:#cfe0f2; padding:12px 14px; border-radius:0; border-bottom:3px solid transparent; }
+.tabs button.active { color:#fff; border-bottom-color:#ffd37a; }
+main { padding:22px 28px; max-width:1200px; }
+.tab { display:none; } .tab.active { display:block; }
+h2 { font-size:18px; } h3 { font-size:15px; margin-top:22px; }
+.muted { color:#66788c; font-size:13px; }
+.row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+.row input, .row select { padding:6px 8px; border:1px solid #b8c4d2; border-radius:6px; }
+label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:#55687d; }
+table { border-collapse:collapse; width:100%; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); margin:10px 0; }
+th,td { text-align:left; padding:8px 10px; border-bottom:1px solid #e7edf4; font-size:13px; vertical-align:top; }
+th { background:#eaf0f7; }
+.card { background:#fff; border-radius:8px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); margin:10px 0; }
+.pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; }
+.pill.open { background:#dff7e9; color:#1f7a4d; }
+.pill.closed { background:#fde4dc; color:#b23b3b; }
+.pill.unverified { background:#fff0cf; color:#92610a; }
+.pill.released { background:#dfeeff; color:#1457b8; }
+.pill.revoked { background:#ececec; color:#777; }
+pre.detail { background:#0e2a45; color:#cfe8ff; padding:10px; border-radius:8px; font-size:12px; overflow:auto; }
+.win { border-left:4px solid #1f7a4d; } .lose { border-left:4px solid #b8c4d2; opacity:.75; }
+.conflict { border-left:4px solid #b23b3b; background:#fff5f5; }

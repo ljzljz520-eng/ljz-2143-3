@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>展馆欢迎平台 · 管理端</title>
+<link rel="stylesheet" href="styles.css">
+<script src="/lib/time.js"></script>
+<script src="/lib/schedule.js"></script>
+</head>
+<body>
+<header class="top">
+  <h1>展馆欢迎平台 · 管理端</h1>
+  <div class="auth">
+    <input id="token" type="password" placeholder="管理令牌（默认 admin-token）">
+    <button onclick="saveToken()">保存</button>
+    <span id="auth-state" class="muted">未设置令牌</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="status" class="active">状态与生效范围</button>
+  <button data-tab="areas">展区</button>
+  <button data-tab="routes">导览路线</button>
+  <button data-tab="schedule">周历 / 节假日</button>
+  <button data-tab="temp">临时事件</button>
+  <button data-tab="publish">发布版本</button>
+  <button data-tab="devices">设备分组</button>
+  <button data-tab="audit">审计追溯</button>
+  <button data-tab="settings">设置</button>
+</nav>
+
+<main>
+  <!-- 状态与生效范围 -->
+  <section id="tab-status" class="tab active">
+    <h2>当前状态与“实际生效范围”</h2>
+    <p class="muted">按 <b>临时事件 &gt; 节假日 &gt; 常规周历</b> 优先级裁决；跨午夜开放不按当天日期切断。</p>
+    <div class="row">
+      <label>观察时刻（本地）<input type="datetime-local" id="obs-at" step="1"></label>
+      <button onclick="loadEffective()">计算</button>
+      <button onclick="setNow()">现在</button>
+    </div>
+    <div id="current-status" class="card"></div>
+    <h3>临时事件的实际生效情况</h3>
+    <div id="temp-effective"></div>
+  </section>
+
+  <!-- 展区 -->
+  <section id="tab-areas" class="tab">
+    <h2>展区</h2>
+    <p class="muted">编辑后草稿版本 +1；只有“转为可用”并整体发布后，终端导览才会引用新版本。</p>
+    <table><thead><tr><th>ID</th><th>名称</th><th>楼层</th><th>描述</th><th>草稿版本</th><th>可用版本</th><th>操作</th></tr></thead>
+    <tbody id="areas-body"></tbody></table>
+    <h3>新增展区</h3>
+    <div class="row">
+      <input id="a-id" placeholder="id（可选）">
+      <input id="a-name" placeholder="名称">
+      <input id="a-floor" placeholder="楼层">
+      <input id="a-desc" placeholder="描述">
+      <input id="a-reason" placeholder="变更原因（记入审计）">
+      <button onclick="createArea()">新增</button>
+    </div>
+  </section>
+
+  <!-- 路线 -->
+  <section id="tab-routes" class="tab">
+    <h2>导览路线</h2>
+    <p class="muted">路线引用的展区必须在发布版本中存在；终端导览按钮只与可用版本匹配，版本不符则停用。</p>
+    <table><thead><tr><th>ID</th><th>名称</th><th>展区（逗号分隔 ID）</th><th>版本</th><th>操作</th></tr></thead>
+    <tbody id="routes-body"></tbody></table>
+    <div class="row">
+      <input id="r-id" placeholder="id">
+      <input id="r-name" placeholder="名称">
+      <input id="r-areas" placeholder="a-history,a-science" style="width:260px">
+      <input id="r-reason" placeholder="变更原因">
+      <button onclick="createRoute()">新增路线</button>
+    </div>
+  </section>
+
+  <!-- 周历 / 节假日 -->
+  <section id="tab-schedule" class="tab">
+    <h2>常规周历</h2>
+    <p class="muted">闭馆时刻 ≤ 开放时刻 即视为跨午夜（如 19:00–02:00 覆盖周六晚至周日凌晨）。</p>
+    <table><thead><tr><th>星期（0=日）</th><th>开放</th><th>闭馆</th><th>名称</th><th>操作</th></tr></thead>
+    <tbody id="weekly-body"></tbody></table>
+    <div class="row">
+      <input id="w-days" placeholder="1,2,3,4,5" style="width:130px">
+      <input id="w-open" type="time" value="09:00">
+      <input id="w-close" type="time" value="17:00">
+      <input id="w-name" placeholder="名称">
+      <button onclick="createWeekly()">新增</button>
+    </div>
+    <h2>节假日安排</h2>
+    <table><thead><tr><th>名称</th><th>起</th><th>止</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody id="holidays-body"></tbody></table>
+    <div class="row">
+      <input id="h-name" placeholder="名称">
+      <input id="h-start" type="date">
+      <input id="h-end" type="date">
+      <select id="h-state"><option value="closed">闭馆</option><option value="open">开放</option></select>
+      <button onclick="createHoliday()">新增</button>
+    </div>
+  </section>
+
+  <!-- 临时事件 -->
+  <section id="tab-temp" class="tab">
+    <h2>临时事件（最高优先级）</h2>
+    <p class="muted">使用 UTC epoch 毫秒。两人同时编辑时，基于 row_version 乐观锁：后打开旧页面的一方提交会收到 402 冲突。</p>
+    <div class="row">
+      <label>开始<input type="datetime-local" id="te-start" step="1"></label>
+      <label>结束<input type="datetime-local" id="te-end" step="1"></label>
+      <select id="te-state"><option value="closed">临时闭馆</option><option value="open">临时开放</option></select>
+      <input id="te-name" placeholder="事件名称" value="临时事件">
+      <input id="te-reason" placeholder="原因（必记）">
+      <button onclick="createTemp()">新增</button>
+    </div>
+    <table><thead><tr><th>ID</th><th>名称</th><th>开始(UTC)</th><th>结束(UTC)</th><th>状态</th><th>原因</th><th>版本</th><th>操作</th></tr></thead>
+    <tbody id="temp-body"></tbody></table>
+    <h3>两人同时改（验收）</h3>
+    <p class="muted">下方对同一条事件打开两个编辑会话：A 先保存成功，B 再保存应收到冲突并显示服务端最新版本。</p>
+    <div id="conflict-lab" class="card"></div>
+  </section>
+
+  <!-- 发布 -->
+  <section id="tab-publish" class="tab">
+    <h2>发布版本</h2>
+    <p class="muted">发布会冻结排期、展区可用版本、路线与背景为快照；撤销不删除记录，必须填写原因并进入审计。</p>
+    <div class="row">
+      <input id="pub-note" placeholder="发布说明（终端侧可追溯）" style="width:300px">
+      <button class="primary" onclick="publishNow()">发布新版本（分组滚动到该版本）</button>
+    </div>
+    <table><thead><tr><th>版本</th><th>状态</th><th>说明</th><th>撤销原因</th><th>创建人/时间</th><th>操作</th></tr></thead>
+    <tbody id="pub-body"></tbody></table>
+    <h3>背景文件</h3>
+    <div class="row">
+      <input type="file" id="bg-file" accept="image/*">
+      <button onclick="uploadBg(false)">上传背景（发布后进入新快照）</button>
+      <button onclick="uploadBg(true)">登记“背景获取失败”</button>
+    </div>
+  </section>
+
+  <!-- 设备 -->
+  <section id="tab-devices" class="tab">
+    <h2>设备分组</h2>
+    <p class="muted">分组维护发布版本、包新鲜度 TTL；超过 TTL 的终端进入“状态待核实”。</p>
+    <table><thead><tr><th>ID</th><th>名称</th><th>发布版本</th><th>TTL(ms)</th><th>操作</th></tr></thead>
+    <tbody id="groups-body"></tbody></table>
+    <h2>设备</h2>
+    <table><thead><tr><th>ID</th><th>名称</th><th>分组</th><th>最后在线</th><th>包版本</th><th>收包时间</th></tr></thead>
+    <tbody id="devices-body"></tbody></table>
+  </section>
+
+  <!-- 审计 -->
+  <section id="tab-audit" class="tab">
+    <h2>审计追溯（发布 / 撤销 / 并发冲突 / 回执拒绝均有原因）</h2>
+    <div id="audit-body"></div>
+  </section>
+
+  <!-- 设置 -->
+  <section id="tab-settings" class="tab">
+    <h2>全局设置</h2>
+    <div class="row">
+      <label>展馆时区(IANA)<input id="s-tz"></label>
+      <label>欢迎文字<input id="s-welcome" style="width:260px"></label>
+      <label>待核实提示<input id="s-stale" style="width:260px"></label>
+      <label>时钟漂移容差(ms)<input id="s-skew" type="number"></label>
+      <button onclick="saveSettings()">保存</button>
+    </div>
+    <p class="muted">切换时区后，周历/节假日按新时区重新解释；历史区间仍为绝对 UTC，不受影响。</p>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

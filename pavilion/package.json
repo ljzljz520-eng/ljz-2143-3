@@ -1,0 +1,15 @@
+{
+  "name": "pavilion-welcome",
+  "version": "1.0.0",
+  "description": "展馆欢迎平台：C 终端展示 / 管理网页 / 服务 API（发布版本、设备分组、时间表、优先级、离线边界）",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0"
+  }
+}

@@ -1,0 +1,47 @@
+* { box-sizing: border-box; }
+html,body { margin:0; height:100%; font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; color:#eef6ff; }
+.bg { position:fixed; inset:0; z-index:-1; background-size:cover; background-position:center;
+  background: linear-gradient(135deg,#0b3d66,#127a8c); }
+.screen { max-width:980px; margin:0 auto; padding:28px 32px 40px; }
+.topbar { display:flex; justify-content:space-between; align-items:center; }
+.clock { font-size:22px; letter-spacing:2px; opacity:.9; }
+.badge { font-size:13px; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,.14); }
+.badge.live { background:#1f7a4d; }
+.badge.offline { background:#8a6d1a; }
+.badge.stale { background:#8c2f2f; }
+.hero { margin:40px 0 10px; }
+h1 { font-size:52px; margin:0 0 24px; text-shadow:0 2px 12px rgba(0,0,0,.45); }
+.status-card { background:rgba(6,22,38,.55); border:1px solid rgba(255,255,255,.18);
+  border-radius:16px; padding:20px 24px; backdrop-filter: blur(4px); }
+.state { font-size:30px; font-weight:700; }
+.state.open { color:#8ff0b8; }
+.state.closed { color:#ffb59c; }
+.state.unverified { color:#ffd37a; }
+.state.loading { color:#cfe3ff; font-size:22px; }
+.state-note { margin-top:8px; opacity:.92; }
+.state-range { margin-top:6px; font-size:14px; opacity:.8; }
+.warnings { margin-top:10px; }
+.warnings div { font-size:13px; color:#ffd37a; margin-top:4px; }
+.hours { margin:22px 0; font-size:15px; opacity:.92; line-height:1.9; }
+.hours .tag { display:inline-block; min-width:86px; color:#bcd8f5; }
+.hours .cross { color:#ffd37a; }
+.guides h2 { font-size:20px; margin:10px 0 14px; }
+.guide-buttons { display:flex; gap:16px; flex-wrap:wrap; }
+.guide-btn { border:none; border-radius:14px; padding:18px 26px; font-size:19px; cursor:pointer;
+  background:#1f7a4d; color:#fff; min-width:200px; text-align:left; transition:transform .1s; }
+.guide-btn:hover:not(:disabled) { transform:translateY(-2px); }
+.guide-btn:disabled { background:#46545f; color:#aebcc7; cursor:not-allowed; }
+.guide-btn small { display:block; font-weight:400; opacity:.8; margin-top:4px; font-size:12px; }
+.guide-note { margin-top:12px; font-size:14px; color:#ffd37a; }
+.basic-nav { margin-top:34px; padding-top:16px; border-top:1px solid rgba(255,255,255,.2);
+  display:flex; gap:26px; }
+.basic-nav a { color:#cfe3ff; text-decoration:none; font-size:15px; opacity:.9; }
+.basic-nav a:hover { text-decoration:underline; }
+.sim { position:fixed; right:10px; bottom:10px; max-width:430px; background:rgba(8,20,33,.9);
+  border:1px solid #345; border-radius:10px; padding:8px 12px; font-size:12px; }
+.sim summary { cursor:pointer; opacity:.8; }
+.sim-grid { display:grid; gap:6px; margin-top:8px; }
+.sim-grid input[type=number], .sim-grid input[type=text] { width:110px; }
+.sim-grid label { display:flex; gap:8px; align-items:center; }
+.sim-grid button { padding:5px 8px; border-radius:6px; border:1px solid #4a7; background:#143; color:#fff; cursor:pointer; }
+.sim-log { max-height:140px; overflow:auto; white-space:pre-wrap; background:#02101c; padding:6px; border-radius:6px; color:#9fd0ff; }
